@@ -1,0 +1,4 @@
+bazel*
+.vscode
+.clang-format
+**/__pycache__
