@@ -1,0 +1,26 @@
+cc_binary(
+    name="cppmain",
+    srcs=["cppmain.cpp"],
+    copts=[
+        "-std=c++23",
+        "-O3",
+        "-march=native",
+        "-DNDEBUG",
+    ],
+    data=[
+        "inputs/input.txt",
+        "inputs/input_test.txt",
+    ],
+    deps=["//utilities:cpputils"],
+)
+
+py_binary(
+    name="pymain",
+    srcs=["pymain.py"],
+    data=[
+        "inputs/input.txt",
+        "inputs/input_test.txt",
+        "inputs/input_test2.txt",
+    ],
+    deps=["//utilities:pyutils"],
+)

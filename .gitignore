@@ -1,0 +1,5 @@
+bazel*
+.vscode
+MODULE.bazel*
+**/input.txt
+**/__pycache__

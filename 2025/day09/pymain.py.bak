@@ -1,0 +1,280 @@
+from utilities.pyutils import *
+
+
+def point_is_in_polygon(polygon, point):
+    """
+    Determine if a point is inside a rectilinear polygon (only horizontal/vertical edges).
+    Optimized for axis-aligned polygons.
+
+    Args:
+        polygon: List of (y, x) tuples representing polygon vertices
+        point: Tuple (y, x) representing the test point
+
+    Returns:
+        True if point is inside polygon or on its boundary, False otherwise
+    """
+    py, px = point
+    n = len(polygon)
+
+    # Check if point is exactly on a vertex
+    if point in polygon:
+        return True
+
+    inside = False
+    j = n - 1
+
+    for i in range(n):
+        yi, xi = polygon[i]
+        yj, xj = polygon[j]
+
+        # Check if point is on horizontal edge
+        if yi == yj == py and min(xi, xj) <= px <= max(xi, xj):
+            return True
+
+        # Check if point is on vertical edge
+        if xi == xj == px and min(yi, yj) <= py <= max(yi, yj):
+            return True
+
+        # Ray casting: only count vertical edges that cross our horizontal ray
+        if xi == xj:  # Vertical edge
+            # Check if edge crosses the horizontal ray at py
+            if min(yi, yj) < py <= max(yi, yj) and xi > px:
+                inside = not inside
+
+        j = i
+
+    return inside
+
+
+def rectangle_intersects_polygon(
+    polygon, rect_min_y, rect_max_y, rect_min_x, rect_max_x
+):
+    """
+    Check if a rectangle intersects with a rectilinear polygon.
+    A rectangle intersects if:
+    1. Any corner of the rectangle is inside the polygon
+    2. Any edge of the polygon intersects the rectangle
+
+    Args:
+        polygon: List of (y, x) tuples representing polygon vertices
+        rect_min_y, rect_max_y: Y bounds of rectangle (inclusive)
+        rect_min_x, rect_max_x: X bounds of rectangle (inclusive)
+
+    Returns:
+        True if rectangle intersects polygon, False otherwise
+    """
+    # Check if any corner of the rectangle is inside the polygon
+    corners = [
+        (rect_min_y, rect_min_x),
+        (rect_min_y, rect_max_x),
+        (rect_max_y, rect_min_x),
+        (rect_max_y, rect_max_x),
+    ]
+
+    for corner in corners:
+        if point_is_in_polygon(polygon, corner):
+            return True
+
+    # Check if any polygon edge intersects the rectangle
+    n = len(polygon)
+    j = n - 1
+
+    for i in range(n):
+        yi, xi = polygon[i]
+        yj, xj = polygon[j]
+
+        # Check horizontal edge
+        if yi == yj:
+            edge_y = yi
+            edge_min_x = min(xi, xj)
+            edge_max_x = max(xi, xj)
+
+            # Does this horizontal edge intersect the rectangle?
+            if rect_min_y <= edge_y <= rect_max_y and not (
+                edge_max_x < rect_min_x or edge_min_x > rect_max_x
+            ):
+                return True
+
+        # Check vertical edge
+        if xi == xj:
+            edge_x = xi
+            edge_min_y = min(yi, yj)
+            edge_max_y = max(yi, yj)
+
+            # Does this vertical edge intersect the rectangle?
+            if rect_min_x <= edge_x <= rect_max_x and not (
+                edge_max_y < rect_min_y or edge_min_y > rect_max_y
+            ):
+                return True
+
+        j = i
+
+    # Check if any polygon vertex is inside the rectangle
+    for yi, xi in polygon:
+        if rect_min_y <= yi <= rect_max_y and rect_min_x <= xi <= rect_max_x:
+            return True
+
+    return False
+
+
+def rectangle_inside_polygon(polygon, rect_min_y, rect_max_y, rect_min_x, rect_max_x):
+    """
+    Check if a rectangle is completely inside a rectilinear polygon.
+    Optimized for speed with early exits.
+
+    Args:
+        polygon: List of (y, x) tuples representing polygon vertices
+        rect_min_y, rect_max_y: Y bounds of rectangle (inclusive)
+        rect_min_x, rect_max_x: X bounds of rectangle (inclusive)
+
+    Returns:
+        True if rectangle is fully inside polygon, False otherwise
+    """
+    # Quick check: all 4 corners must be inside (fast rejection)
+    if not (
+        point_is_in_polygon(polygon, (rect_min_y, rect_min_x))
+        and point_is_in_polygon(polygon, (rect_min_y, rect_max_x))
+        and point_is_in_polygon(polygon, (rect_max_y, rect_min_x))
+        and point_is_in_polygon(polygon, (rect_max_y, rect_max_x))
+    ):
+        return False
+
+    # For small rectangles, just checking corners might be enough
+    width = rect_max_x - rect_min_x
+    height = rect_max_y - rect_min_y
+
+    if width <= 1 and height <= 1:
+        return True
+
+    # Sample edges at intervals to reduce checks
+    # For larger rectangles, check every few points instead of every point
+    step = 1  # max(1, min(width, height) // 10)  # Check ~10 points per edge
+
+    # Check top and bottom edges with step
+    for x in range(rect_min_x, rect_max_x + 1, step):
+        if not point_is_in_polygon(polygon, (rect_min_y, x)):
+            return False
+        if not point_is_in_polygon(polygon, (rect_max_y, x)):
+            return False
+
+    # Make sure to check the last point if we skipped it
+    if (rect_max_x - rect_min_x) % step != 0:
+        if not point_is_in_polygon(polygon, (rect_min_y, rect_max_x)):
+            return False
+        if not point_is_in_polygon(polygon, (rect_max_y, rect_max_x)):
+            return False
+
+    # Check left and right edges with step
+    for y in range(rect_min_y + 1, rect_max_y, step):
+        if not point_is_in_polygon(polygon, (y, rect_min_x)):
+            return False
+        if not point_is_in_polygon(polygon, (y, rect_max_x)):
+            return False
+
+    # Make sure to check the last point if we skipped it
+    if (rect_max_y - rect_min_y) % step != 0:
+        if not point_is_in_polygon(polygon, (rect_max_y, rect_min_x)):
+            return False
+        if not point_is_in_polygon(polygon, (rect_max_y, rect_max_x)):
+            return False
+
+    return True
+
+
+def solve_part_one(content):
+    timer = Timer()
+
+    points = [list(map(int, line.split(","))) for line in content]
+
+    max_area = 0
+    for i in range(len(points)):
+        p1 = points[i]
+        for j in range(i + 1, len(points)):
+            p2 = points[j]
+
+            w = max(p1[1], p2[1]) - min(p1[1], p2[1]) + 1
+            h = max(p1[0], p2[0]) - min(p1[0], p2[0]) + 1
+
+            area = w * h
+
+            if area > max_area:
+                max_area = area
+
+    ans = max_area
+
+    print(f"part 1 (runtime: {timer.elapsed_ms():.3f}ms): {ans}")
+
+
+def solve_part_two(content):
+    timer = Timer()
+
+    polygon = [(int(line.split(",")[1]), int(line.split(",")[0])) for line in content]
+    polygon.append(polygon[0])  # Close the polygon
+
+    # Pre-compute polygon bounding box for quick rejection
+    poly_min_y = min(p[0] for p in polygon)
+    poly_max_y = max(p[0] for p in polygon)
+    poly_min_x = min(p[1] for p in polygon)
+    poly_max_x = max(p[1] for p in polygon)
+
+    vertices = [(v[0], v[1]) for v in polygon]
+    pairs = [
+        (vertices[i], vertices[j])
+        for i in range(len(vertices))
+        for j in range(i + 1, len(vertices))
+    ]
+    pairs.sort(
+        key=lambda p: (p[0][0] - p[1][0]) ** 2 + (p[0][1] - p[1][1]) ** 2, reverse=True
+    )
+
+    max_area = 0
+    checked = 0
+    # for i in range(len(polygon)):
+    #     p1 = polygon[i]
+    #     for j in range(i + 1, len(polygon)):
+    #         p2 = polygon[j])
+    for i, (p1, p2) in enumerate(pairs):
+
+        print(f"Checking points {p1}, {p2} ({i}/{len(pairs)}): max_area={max_area}")
+
+        min_y = min(p1[0], p2[0])
+        max_y = max(p1[0], p2[0])
+
+        min_x = min(p1[1], p2[1])
+        max_x = max(p1[1], p2[1])
+
+        height = max_y - min_y + 1
+        width = max_x - min_x + 1
+
+        area = height * width
+
+        # Only check if this could potentially beat the current max
+        if area <= max_area:
+            continue
+
+        # Quick bounding box check
+        if (
+            min_y < poly_min_y
+            or max_y > poly_max_y
+            or min_x < poly_min_x
+            or max_x > poly_max_x
+        ):
+            continue
+
+        checked += 1
+        # Check if rectangle is fully inside the polygon
+        if rectangle_inside_polygon(polygon, min_y, max_y, min_x, max_x):
+            max_area = area
+            print(f"New max area: {max_area} at points {p1}, {p2}")
+
+    ans = max_area
+
+    print(f"Checked {checked} rectangles")
+    print(f"part 2 (runtime: {timer.elapsed_ms():.3f}ms): {ans}")
+
+
+if __name__ == "__main__":
+    content = read_input("2025/day09/inputs/input.txt", delimiter="\n")
+
+    # solve_part_one(content)
+    solve_part_two(content)
