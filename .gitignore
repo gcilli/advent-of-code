@@ -1,5 +1,5 @@
 bazel*
 .vscode
-MODULE.bazel*
+MODULE.bazel.lock
 **/input.txt
 **/__pycache__
