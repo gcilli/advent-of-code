@@ -1,3 +1,6 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 cc_library(
     name = "cpputils",
     hdrs = ["cpputils.h"],
